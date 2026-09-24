@@ -1,0 +1,4 @@
+{"timestamp": 1789715926.6058195, "event": "pick", "track_id": 1, "product": "coke_500ml", "conf": 0.9, "session_id": "test"}
+{"timestamp": 1789715972.7247775, "event": "pick", "track_id": 1, "product": "coke_500ml", "conf": 0.9, "session_id": "test"}
+{"timestamp": 1789716017.474525, "event": "pick", "track_id": 1, "product": "coke_500ml", "conf": 0.9, "session_id": "test"}
+{"timestamp": 1789717457.33508, "event": "pick", "track_id": 1, "product": "coke_500ml", "conf": 0.9, "session_id": "test"}
