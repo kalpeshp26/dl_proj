@@ -306,8 +306,9 @@ class StateMachineManager:
                             break
 
                     self._machines[tid].state = ProductState.BASKET
-                    self._machines[tid]._came_from_basket = True
-                    # Only mark pick_emitted if it was already billed previously
+                    # Only set _came_from_basket if we are truly re-acquiring an already-billed item;
+                    # brand-new tracks appearing in basket are just picked items, not returns.
+                    self._machines[tid]._came_from_basket = reacquired
                     self._machines[tid].pick_emitted = reacquired
 
             # Update last_seen for settled basket items
@@ -353,7 +354,10 @@ class StateMachineManager:
         # Re-identification putback detection:
         # If an item was billed in the basket, but has now disappeared from the basket,
         # and an item of that product appears on the SHELF (table), emit return even if
-        # hand occlusion changed the track ID!
+        # hand occlusion changed the track ID.
+        # Guard: only fire if the basket item has been gone for at least 2.5s AND the
+        # shelf item is far from the basket item's last known position (>80px) —
+        # this prevents brief zone misclassifications at low FPS from looking like putbacks.
         active_basket_tids = {t["track_id"] for t in tracks_with_zones if t["zone"] == "BASKET"}
         for t in tracks_with_zones:
             if t["zone"] == "SHELF":
@@ -364,6 +368,13 @@ class StateMachineManager:
                     for s_idx, item in enumerate(self._settled_basket_items):
                         if (prod != "UNKNOWN" and item["product"] == prod) or (prod != "UNKNOWN" and item["product"] == "UNKNOWN"):
                             if item["track_id"] not in active_basket_tids:
+                                time_gone = now - item["last_seen"]
+                                shelf_cx, shelf_cy = t.get("cx", 0.0), t.get("cy", 0.0)
+                                dist_from_basket = ((item["cx"] - shelf_cx)**2 + (item["cy"] - shelf_cy)**2)**0.5
+                                # Require item to have been absent from basket for ≥2.5s
+                                # AND the shelf position to be meaningfully away from the basket position
+                                if time_gone < 2.5 or dist_from_basket < 80.0:
+                                    continue  # too soon / too close — likely a zone flicker, not a real putback
                                 ret_prod = item["product"] if item["product"] != "UNKNOWN" else prod
                                 ret_event = RetailEvent(
                                     event="return",
