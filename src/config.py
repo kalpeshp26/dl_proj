@@ -113,8 +113,9 @@ UNKNOWN_ALERT_FRAMES: int = 8          # consecutive UNKNOWN votes before UNKNOW
 
 # ─── Open-set rejection ──────────────────────────────────────────────────────
 # Cosine distance to nearest class centroid. Above = UNKNOWN.
-# Set to 0.48 to accommodate webcam lighting variations without false rejection
-OPENSET_DIST_THRESH: float = 0.48
+# Lowered to 0.30: products not in training (e.g. Sunsilk) typically score
+# 0.35–0.55 from the nearest centroid; trained products score <0.25.
+OPENSET_DIST_THRESH: float = 0.30
 EMBEDDING_DIM: int = 1024              # MobileNetV3-Small penultimate layer dim (classifier[:-1])
 
 # ─── Tracker ─────────────────────────────────────────────────────────────────

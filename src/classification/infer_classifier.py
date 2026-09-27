@@ -253,7 +253,11 @@ class ProductClassifier:
         centroids_meta = MODELS_DIR / "centroids_meta.json"
         if self._centroids is not None and centroids_meta.exists():
             openset_dist = self._cosine_dist_to_nearest(emb_np)
-            eff_thresh = max(self._thresh, 0.52) if conf >= 0.85 else self._thresh
+            # High softmax confidence on an UNKNOWN product → tighten the gate,
+            # not loosen it. A genuine known product scores very close to its
+            # centroid (<0.20); an unknown product like Sunsilk scores >0.30
+            # even at 95% softmax confidence (the softmax is overconfident).
+            eff_thresh = self._thresh * 0.85 if conf >= 0.85 else self._thresh
             is_unknown = openset_dist > eff_thresh
 
         heur_name, heur_conf = self._heuristic_classify(crop_bgr)
