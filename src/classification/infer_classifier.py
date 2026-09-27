@@ -247,27 +247,45 @@ class ProductClassifier:
         pred_idx = int(max_indices[best_view_idx].item())
         emb_np = emb[best_view_idx].cpu().numpy()
 
-        # Open-set check using the best-aligned orientation
+        # ── Open-set / UNKNOWN detection ─────────────────────────────────────
+        # Dual criterion (no real centroids needed):
+        #   1. Softmax margin: gap between top-1 and top-2 < 0.30 → model is
+        #      unsure (typical for unseen objects that sit between two classes)
+        #   2. Max confidence < 0.65 → overall low certainty
+        #   3. Optional centroid distance (only when real centroids computed by
+        #      openset.py are available via centroids_meta.json)
         openset_dist = 0.0
         is_unknown = False
+
+        best_probs = probs[best_view_idx]  # shape (num_classes,)
+        top2 = best_probs.topk(min(2, self._num_classes))
+        top1_conf = float(top2.values[0].item())
+        margin = float((top2.values[0] - top2.values[1]).item()) if len(top2.values) > 1 else 1.0
+
+        # Mark UNKNOWN if model is ambiguous or low confidence
+        if top1_conf < 0.65 or margin < 0.30:
+            is_unknown = True
+
+        # Centroid distance check (only when real centroids exist from openset.py)
         centroids_meta = MODELS_DIR / "centroids_meta.json"
         if self._centroids is not None and centroids_meta.exists():
-            openset_dist = self._cosine_dist_to_nearest(emb_np)
-            # High softmax confidence on an UNKNOWN product → tighten the gate,
-            # not loosen it. A genuine known product scores very close to its
-            # centroid (<0.20); an unknown product like Sunsilk scores >0.30
-            # even at 95% softmax confidence (the softmax is overconfident).
-            eff_thresh = self._thresh * 0.85 if conf >= 0.85 else self._thresh
-            is_unknown = openset_dist > eff_thresh
+            meta_data = {}
+            try:
+                import json as _json
+                with open(centroids_meta) as _f:
+                    meta_data = _json.load(_f)
+            except Exception:
+                pass
+            # Only apply centroid check if centroids were computed from real data
+            if meta_data.get("per_class_sample_counts", {}) and \
+               any(v > 0 for v in meta_data.get("per_class_sample_counts", {}).values()):
+                openset_dist = self._cosine_dist_to_nearest(emb_np)
+                eff_thresh = self._thresh * 0.85 if conf >= 0.85 else self._thresh
+                if openset_dist > eff_thresh:
+                    is_unknown = True
 
-        heur_name, heur_conf = self._heuristic_classify(crop_bgr)
-        if not centroids_meta.exists():
-            class_name = heur_name
-            class_idx = next((k for k, v in self._idx_to_class.items() if v == heur_name), pred_idx)
-            conf = max(conf, heur_conf)
-        else:
-            class_name = "UNKNOWN" if is_unknown else self._idx_to_class.get(pred_idx, "UNKNOWN")
-            class_idx = -1 if is_unknown else pred_idx
+        class_name = "UNKNOWN" if is_unknown else self._idx_to_class.get(pred_idx, "UNKNOWN")
+        class_idx = -1 if is_unknown else pred_idx
 
         result = ClassificationResult(
             class_name=class_name,
