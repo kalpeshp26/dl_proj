@@ -1,0 +1,43 @@
+# DeepRetail — dependencies (tested target: Python 3.10 – 3.12)
+# Install:  pip install -r requirements.txt
+#
+# PyTorch: for CPU-only machines the default wheel is fine. For an NVIDIA GPU,
+# install torch/torchvision first from https://pytorch.org/get-started/locally/
+# and then run the line above.
+
+# Core DL stack (PyTorch only — no TensorFlow)
+torch>=2.2
+torchvision>=0.17
+
+# Detection
+ultralytics>=8.3,<9
+
+# Computer vision (OpenCV 4.x — there is no stable 5.x wheel)
+opencv-python>=4.9,<5
+
+# Scientific computing / tracker
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+
+# Backend
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+python-multipart>=0.0.9
+
+# Dashboard
+streamlit>=1.40
+requests>=2.31
+
+# Testing
+pytest>=8.0
+pytest-asyncio>=0.23
+httpx>=0.27
+
+# Utilities
+Pillow>=10.0
+tqdm>=4.66
+matplotlib>=3.8
+scikit-learn>=1.4
+PyYAML>=6.0

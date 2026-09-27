@@ -1,0 +1,13 @@
+{
+  "include": [
+    "src",
+    "tests",
+    "dashboard",
+    "calibrate.py",
+    "run_demo.py"
+  ],
+  "extraPaths": [
+    "C:\\Users\\Administrator\\AppData\\Roaming\\Python\\Python313\\site-packages",
+    "."
+  ]
+}

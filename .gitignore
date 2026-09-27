@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime artifacts
+deepretail.db
+deepretail.db-*
+logs/*.jsonl
+logs/*.json
+config.json
+runs/
+
+# Model weights (large — share via Releases / Drive; see README)
+models/*.pt
+models/*.npy
+models/*.json
+weights/
+yolov8*.pt
+
+# Raw captures and YOLO dataset (large, regenerate or download)
+data/raw_images/*
+!data/raw_images/.gitkeep
+data/yolo_dataset/*
+!data/yolo_dataset/.gitkeep
+deepretail_yolo_dataset/
+deepretail_yolo_roboflow_upload/
+models/yolo_runs/
+
+# Uploaded shopping videos (user runtime data — not source code)
+data/uploads/*.mp4
+data/uploads/*.avi
+data/uploads/*.mov
+data/uploads/*.mkv
+data/uploads/*.webm
+
+# SQLite WAL/SHM files
+*.db-wal
+*.db-shm
+
+# Active source config (runtime state)
+data/active_source.json
+
+# Classifier training images (large dataset — regenerate locally or download from Roboflow)
+data/classifier_dataset/
