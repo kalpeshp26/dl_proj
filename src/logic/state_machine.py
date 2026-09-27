@@ -101,6 +101,7 @@ class TrackStateMachine:
         self.pick_emitted: bool = False        # True once item has been billed
         self._shelf_streak: int = 0            # Debounce shelf returns
         self._picked_product: Optional[str] = initial_product if initial_product != "UNKNOWN" else None
+        self._pick_time: Optional[float] = None  # wall-clock time of last pick event
 
     def update(
         self,
@@ -131,6 +132,7 @@ class TrackStateMachine:
                 if self.product != "UNKNOWN" and not self.pick_emitted:
                     self.pick_emitted = True
                     self._picked_product = self.product
+                    self._pick_time = time.time()
                     event = RetailEvent(
                         event="pick",
                         track_id=self.track_id,
@@ -155,6 +157,7 @@ class TrackStateMachine:
                 if self.product != "UNKNOWN" and not self.pick_emitted:
                     self.pick_emitted = True
                     self._picked_product = self.product
+                    self._pick_time = time.time()
                     event = RetailEvent(
                         event="pick",
                         track_id=self.track_id,
@@ -166,15 +169,17 @@ class TrackStateMachine:
             elif zone == "SHELF":
                 if self._came_from_basket and self.pick_emitted:
                     # BASKET → HELD → SHELF — RETURN event
-                    ret_prod = self.product if self.product != "UNKNOWN" else (self._picked_product or "UNKNOWN")
-                    event = RetailEvent(
-                        event="return",
-                        track_id=self.track_id,
-                        product=ret_prod,
-                        conf=max(self.conf, 0.85),
-                        session_id=self.session_id,
-                    )
-                    self.pick_emitted = False
+                    # Cooldown: don't fire return within 3s of the pick
+                    if self._pick_time is None or (time.time() - self._pick_time) >= 3.0:
+                        ret_prod = self.product if self.product != "UNKNOWN" else (self._picked_product or "UNKNOWN")
+                        event = RetailEvent(
+                            event="return",
+                            track_id=self.track_id,
+                            product=ret_prod,
+                            conf=max(self.conf, 0.85),
+                            session_id=self.session_id,
+                        )
+                        self.pick_emitted = False
                 # Go back to SHELF state
                 self.state = ProductState.SHELF
                 self._held_since = None
@@ -203,11 +208,12 @@ class TrackStateMachine:
         elif self.state == ProductState.BASKET:
             if zone == "BASKET":
                 self._shelf_streak = 0
-                # Item is in basket. If it was previously UNKNOWN or pending pick,
+                # If it was previously UNKNOWN or pending pick,
                 # emit the PICK event immediately!
                 if self.product != "UNKNOWN" and not self.pick_emitted:
                     self.pick_emitted = True
                     self._picked_product = self.product
+                    self._pick_time = time.time()
                     event = RetailEvent(
                         event="pick",
                         track_id=self.track_id,
@@ -218,15 +224,17 @@ class TrackStateMachine:
             elif zone == "SHELF":
                 # Direct transition from BASKET to SHELF
                 if self.pick_emitted:
-                    ret_prod = self.product if self.product != "UNKNOWN" else (self._picked_product or "UNKNOWN")
-                    event = RetailEvent(
-                        event="return",
-                        track_id=self.track_id,
-                        product=ret_prod,
-                        conf=max(self.conf, 0.85),
-                        session_id=self.session_id,
-                    )
-                    self.pick_emitted = False
+                    # Cooldown: don't fire return within 3s of the pick
+                    if self._pick_time is None or (time.time() - self._pick_time) >= 3.0:
+                        ret_prod = self.product if self.product != "UNKNOWN" else (self._picked_product or "UNKNOWN")
+                        event = RetailEvent(
+                            event="return",
+                            track_id=self.track_id,
+                            product=ret_prod,
+                            conf=max(self.conf, 0.85),
+                            session_id=self.session_id,
+                        )
+                        self.pick_emitted = False
                 self.state = ProductState.SHELF
                 self._held_since = None
                 self._came_from_basket = False

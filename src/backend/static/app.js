@@ -12,6 +12,7 @@
     audioEnabled: true,
     audioCtx: null,
     cartItems: [],
+    cartTotalQty: 0,        // track qty for beep-on-change
     subtotal: 0.0,
     tax: 0.0,
     grandTotal: 0.0,
@@ -277,7 +278,19 @@
       const res = await fetch(`/cart/${state.sessionId}`);
       if (!res.ok) return;
       const data = await res.json();
-      renderCart(data.items || [], data.total || 0.0);
+      const items = data.items || [];
+      const newQty = items.reduce((acc, it) => acc + (it.quantity || 1), 0);
+      const oldQty = state.cartTotalQty;
+      renderCart(items, data.total || 0.0);
+      // Beep whenever the cart quantity changes (catches events missed by WS)
+      if (newQty > oldQty) {
+        initAudio();
+        playPickChime();
+      } else if (newQty < oldQty && oldQty > 0) {
+        initAudio();
+        playReturnChime();
+      }
+      state.cartTotalQty = newQty;
     } catch (e) { /* ignore */ }
   }
 
@@ -861,6 +874,9 @@
   }
 
   // ─── INITIALIZATION ────────────────────────────────────────────────────────
+  // Eagerly init audio so context is ready before first pick arrives
+  // (browsers allow AudioContext creation; it just starts suspended until a gesture)
+  initAudio();
   window.addEventListener('click', initAudio, { once: true });
   window.addEventListener('keydown', initAudio, { once: true });
 
