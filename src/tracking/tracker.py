@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from scipy.optimize import linear_sum_assignment
+from scipy.optimize import linear_sum_assignment  # type: ignore[import-untyped]
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.config import (

@@ -86,7 +86,7 @@ def load_world_model():
             "Fix: pip install git+https://github.com/ultralytics/CLIP.git "
             "(needs git installed), then run again."
         ) from e
-    model._prompt_list = prompts
+    object.__setattr__(model, "_prompt_list", prompts)  # bypass nn.Module.__setattr__ type guard
     return model, [WORLD_PROMPTS[p] for p in prompts]
 
 

@@ -434,6 +434,7 @@ class Pipeline:
                 if self._mock:
                     frame = self._mock.frame()
                 else:
+                    assert self._source is not None  # always set when not mock_mode
                     ret, frame = self._source.read()
                     if not ret:
                         print("[Pipeline] Stream ended.")
@@ -442,6 +443,7 @@ class Pipeline:
                 frame_id += 1
                 if max_frames is not None and frame_id > max_frames:
                     break
+                assert frame is not None  # guaranteed: mock returns ndarray; VideoCapture guarded by `if not ret: break`
                 pipeline_state.frame_id = frame_id
                 pipeline_state.frame = frame
 
@@ -449,6 +451,7 @@ class Pipeline:
                 if self._mock:
                     detections = self._mock.detections(frame_id)
                 else:
+                    assert self._detector is not None  # always set when not mock_mode
                     detections = self._detector.detect(frame, frame_id)
                 pipeline_state.detections = [d.to_dict() for d in detections]
 
@@ -486,6 +489,7 @@ class Pipeline:
                     elif any(k in t_prompt for k in ("vaseline", "jelly", "jar")):
                         direct_product = "vaseline_jelly"
 
+                    assert self._classifier is not None  # always set when not mock_mode
                     r = self._classifier.classify(crop, frame_id=frame_id, track_id=t.track_id)
                     final_name = direct_product if direct_product else ("UNKNOWN" if r.is_unknown else r.class_name)
                     final_conf = 0.95 if direct_product else r.conf
