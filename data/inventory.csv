@@ -1,0 +1,5 @@
+name,display_name,category,price,stock,low_stock_threshold,shelf_slot
+chings_manchurian,Ching's Veg Manchurian Masala Mix,spices,10,6,3,slot_0
+chings_hakka,Ching's Hakka Noodles Masala,spices,10,6,3,slot_1
+homelite_matchbox,Homelite Matchbox,household,2,6,3,slot_2
+vaseline_jelly,Vaseline Petroleum Jelly,personal care,50,6,3,slot_3

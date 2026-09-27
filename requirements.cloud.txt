@@ -1,0 +1,22 @@
+# DeepRetail Cloud — lightweight backend for Railway/Render
+# Does NOT include torch/ultralytics/opencv (no live detection in cloud)
+# The cloud instance serves the UI, inventory, analytics, and video-upload bill generation.
+
+# Backend
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+python-multipart>=0.0.9
+
+# Dashboard
+streamlit>=1.40
+requests>=2.31
+
+# Data
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
+
+# Utilities
+Pillow>=10.0
+PyYAML>=6.0

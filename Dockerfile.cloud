@@ -1,0 +1,38 @@
+# ── Railway Cloud Dockerfile ──────────────────────────────────────────────────
+# Deploys the FastAPI backend + static UI to Railway.
+# Live webcam detection is LOCAL ONLY. Cloud serves:
+#   - The premium kiosk UI  (/)
+#   - Inventory & cart API
+#   - Analytics endpoints
+#   - Video upload (offline analysis needs the full local install → returns 503 here)
+#   - Demand forecast (/forecast — NumPy only, works in the cloud)
+#   - WebSocket live event stream
+# ─────────────────────────────────────────────────────────────────────────────
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install lightweight cloud requirements (no torch/opencv/YOLO)
+COPY requirements.cloud.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application
+COPY . .
+
+# Ensure necessary directories exist
+RUN mkdir -p data/uploads logs models
+
+# Initialize the database on first run via entrypoint
+COPY docker/cloud_entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 8000
+
+ENTRYPOINT ["/entrypoint.sh"]
