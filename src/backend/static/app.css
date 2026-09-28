@@ -1507,6 +1507,17 @@ body, body.enterprise-dark, body.enterprise-light, body.elite-white {
   color: #fff;
 }
 
+.btn-stop-stream {
+  background: transparent;
+  border: 1px solid var(--accent-rose);
+  color: var(--accent-rose);
+}
+
+.btn-stop-stream:hover {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: #f43f5e;
+}
+
 /* ─── TOAST NOTIFICATIONS ─────────────────────────────────────────────────── */
 .toast-stack {
   position: fixed;
@@ -2038,8 +2049,8 @@ body, body.enterprise-dark, body.enterprise-light, body.elite-white {
   position: relative;
   z-index: 1;
   width: min(760px, 92vw);
-  background: #ffffff;
-  border-left: 1px solid var(--border-subtle);
+  background: #101828;
+  border-left: 1px solid var(--border-medium);
   display: flex;
   flex-direction: column;
   overflow: hidden;

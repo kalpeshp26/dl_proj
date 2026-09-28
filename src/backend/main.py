@@ -182,7 +182,7 @@ async def upload_video(file: UploadFile = File(...)):
     """Upload a video file to data/uploads and automatically set it as the active pipeline source."""
     from src.config import UPLOADS_DIR, save_active_source
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    clean_name = Path(file.filename).name
+    clean_name = Path(file.filename or "upload.mp4").name
     target_path = UPLOADS_DIR / clean_name
     content = await file.read()
     with open(target_path, "wb") as f:
@@ -251,6 +251,8 @@ def _run_offline_analysis_thread(job_id: str, video_path: str):
         _offline_jobs[job_id]["progress"] = 100.0
         _offline_jobs[job_id]["result"] = res
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         _offline_jobs[job_id]["status"] = "failed"
         _offline_jobs[job_id]["error"] = str(e)
 

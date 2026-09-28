@@ -73,7 +73,7 @@ def analyze_shopping_video_offline(
     timeline: list[dict] = []
     labels: dict[int, TrackLabel] = {}
     frame_idx = 0
-    price_cache: dict[str, float] = {}
+    price_cache: dict[str, Optional[float]] = {}
 
     def price_of(name: str) -> Optional[float]:
         if name not in price_cache:
@@ -129,6 +129,8 @@ def analyze_shopping_video_offline(
                 if (frame_idx + t.track_id) % CLASSIFY_EVERY_N_FRAMES and lab._names:
                     continue
                 crop = DetectionResult(class_name="product", conf=t.conf, xyxy=t.box).crop(frame)
+                if crop.size == 0:
+                    continue
                 t_prompt = getattr(t, "prompt", "").lower()
                 direct_product = None
                 if any(k in t_prompt for k in ("hakka", "noodle")):

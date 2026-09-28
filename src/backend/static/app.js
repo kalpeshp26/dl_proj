@@ -180,6 +180,26 @@
     } catch (e) { /* ignore */ }
   }
 
+  function playSuccessChime() {
+    if (!state.audioEnabled || !state.audioCtx) return;
+    try {
+      const ctx = state.audioCtx;
+      const notes = [659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.1);
+        gain.gain.setValueAtTime(0.14, ctx.currentTime + idx * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.28);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + idx * 0.1);
+        osc.stop(ctx.currentTime + idx * 0.1 + 0.29);
+      });
+    } catch (e) { /* ignore */ }
+  }
+
   function playCheckoutFanfare() {
     if (!state.audioEnabled || !state.audioCtx) return;
     try {
@@ -603,6 +623,29 @@
       showToast('alert', 'Failed to switch video stream');
     }
   });
+
+  // Action Button: Stop Stream / Return to Camera
+  const btnStopStream = document.getElementById('btnStopStream');
+  if (btnStopStream) {
+    btnStopStream.addEventListener('click', async () => {
+      initAudio();
+      try {
+        await fetch('/pipeline/source', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 0 }),
+        });
+        DOM.activeSourceLabel.textContent = 'CAMERA 0';
+        showToast('pick', 'Stream stopped — switched back to Live Webcam');
+        // Deselect any selected video chip
+        document.querySelectorAll('.video-chip').forEach(c => c.classList.remove('selected'));
+        state.selectedVideoPath = null;
+        state.selectedVideoName = null;
+      } catch (err) {
+        showToast('alert', 'Failed to stop stream');
+      }
+    });
+  }
 
   // Action Button 2: Process Entire Video & Generate Final Bill (Offline)
   DOM.btnBatchProcessVideo.addEventListener('click', async () => {

@@ -301,31 +301,38 @@ class StateMachineManager:
                     anomaly_enabled=self.anomaly_enabled,
                 )
                 if t["zone"] == "BASKET":
-                    # Check if this is a track re-acquisition of an item already billed at this spot
-                    reacquired = False
+                    # Check if this is a track re-acquisition of an item already in the basket
+                    reacquired_item = None
                     for item in self._settled_basket_items:
-                        dist = ((item["cx"] - cx)**2 + (item["cy"] - cy)**2)**0.5
-                        if (item["product"] == prod or prod == "UNKNOWN") and dist < 120.0 and (now - item["last_seen"]) < 6.0:
-                            reacquired = True
-                            item["last_seen"] = now
-                            item["track_id"] = tid
-                            item["cx"] = cx
-                            item["cy"] = cy
+                        if item["product"] == prod or prod == "UNKNOWN" or item["product"] == "UNKNOWN":
+                            reacquired_item = item
                             break
 
-                    self._machines[tid].state = ProductState.BASKET
-                    # Only set _came_from_basket if we are truly re-acquiring an already-billed item;
-                    # brand-new tracks appearing in basket are just picked items, not returns.
-                    self._machines[tid]._came_from_basket = reacquired
-                    self._machines[tid].pick_emitted = reacquired
+                    if reacquired_item is not None:
+                        reacquired_item["last_seen"] = now
+                        reacquired_item["track_id"] = tid
+                        reacquired_item["cx"] = cx
+                        reacquired_item["cy"] = cy
+                        if reacquired_item["product"] == "UNKNOWN" and prod != "UNKNOWN":
+                            reacquired_item["product"] = prod
+                        self._machines[tid].state = ProductState.BASKET
+                        self._machines[tid]._came_from_basket = True
+                        self._machines[tid].pick_emitted = True
+                        self._machines[tid]._picked_product = reacquired_item["product"]
+                    else:
+                        self._machines[tid].state = ProductState.BASKET
+                        self._machines[tid]._came_from_basket = False
+                        self._machines[tid].pick_emitted = False
 
             # Update last_seen for settled basket items
             if t["zone"] == "BASKET":
                 for item in self._settled_basket_items:
-                    if item.get("track_id") == tid:
+                    if item.get("track_id") == tid or (prod != "UNKNOWN" and item["product"] == prod):
                         item["last_seen"] = now
                         item["cx"] = cx
                         item["cy"] = cy
+                        if item["product"] == "UNKNOWN" and prod != "UNKNOWN":
+                            item["product"] = prod
 
             event = self._machines[tid].update(
                 zone=t["zone"],
@@ -333,10 +340,29 @@ class StateMachineManager:
                 conf=t.get("conf", 0.0),
             )
             if event:
-                events.append(event)
-                self._log_event(event)
-
                 if event.event == "pick":
+                    # Prevent multiple picks for an item that is already in the shopping bag.
+                    # An item only counts as one until it moves out completely from the bag.
+                    count_settled = sum(1 for it in self._settled_basket_items if it["product"] == event.product)
+                    count_active_in_basket = sum(
+                        1 for ot in tracks_with_zones
+                        if ot["zone"] == "BASKET" and (ot.get("product") == event.product or ot.get("product") == "UNKNOWN")
+                    )
+                    if count_settled > 0 and count_active_in_basket <= count_settled:
+                        # Re-bind to existing settled item and suppress duplicate pick
+                        for it in self._settled_basket_items:
+                            if it["product"] == event.product or it["product"] == "UNKNOWN":
+                                it["track_id"] = tid
+                                it["cx"] = cx
+                                it["cy"] = cy
+                                it["last_seen"] = now
+                                it["product"] = event.product
+                                break
+                        self._machines[tid].pick_emitted = True
+                        self._machines[tid]._came_from_basket = True
+                        self._machines[tid]._picked_product = event.product
+                        continue
+
                     self._settled_basket_items.append({
                         "track_id": tid,
                         "product": event.product,
@@ -353,6 +379,9 @@ class StateMachineManager:
                     if found_idx >= 0:
                         self._settled_basket_items.pop(found_idx)
 
+                events.append(event)
+                self._log_event(event)
+
                 for cb in self._event_callbacks:
                     try:
                         cb(event)
@@ -363,9 +392,6 @@ class StateMachineManager:
         # If an item was billed in the basket, but has now disappeared from the basket,
         # and an item of that product appears on the SHELF (table), emit return even if
         # hand occlusion changed the track ID.
-        # Guard: only fire if the basket item has been gone for at least 2.5s AND the
-        # shelf item is far from the basket item's last known position (>80px) —
-        # this prevents brief zone misclassifications at low FPS from looking like putbacks.
         active_basket_tids = {t["track_id"] for t in tracks_with_zones if t["zone"] == "BASKET"}
         for t in tracks_with_zones:
             if t["zone"] == "SHELF":
@@ -379,10 +405,8 @@ class StateMachineManager:
                                 time_gone = now - item["last_seen"]
                                 shelf_cx, shelf_cy = t.get("cx", 0.0), t.get("cy", 0.0)
                                 dist_from_basket = ((item["cx"] - shelf_cx)**2 + (item["cy"] - shelf_cy)**2)**0.5
-                                # Require item to have been absent from basket for ≥2.5s
-                                # AND the shelf position to be meaningfully away from the basket position
-                                if time_gone < 2.5 or dist_from_basket < 80.0:
-                                    continue  # too soon / too close — likely a zone flicker, not a real putback
+                                if time_gone < 0.8 or dist_from_basket < 80.0:
+                                    continue
                                 ret_prod = item["product"] if item["product"] != "UNKNOWN" else prod
                                 ret_event = RetailEvent(
                                     event="return",
