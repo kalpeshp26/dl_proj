@@ -480,10 +480,10 @@ class Pipeline:
                     # Direct prompt resolution from YOLO-World zero-shot prompt
                     t_prompt = getattr(t, "prompt", "").lower()
                     direct_product = None
-                    if any(k in t_prompt for k in ("manchurian", "chings", "soup")):
-                        direct_product = "chings_manchurian"
-                    elif any(k in t_prompt for k in ("hakka", "noodle")):
+                    if any(k in t_prompt for k in ("hakka", "noodle")):
                         direct_product = "chings_hakka"
+                    elif any(k in t_prompt for k in ("manchurian", "soup")):
+                        direct_product = "chings_manchurian"
                     elif any(k in t_prompt for k in ("matchbox", "homelite")):
                         direct_product = "homelite_matchbox"
                     elif any(k in t_prompt for k in ("vaseline", "jelly", "jar")):

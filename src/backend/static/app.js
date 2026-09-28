@@ -67,6 +67,28 @@
     opInventoryTableBody: document.getElementById('opInventoryTableBody'),
     opInventoryCount: document.getElementById('opInventoryCount'),
     auditLogList: document.getElementById('auditLogList'),
+    opAlertsList: document.getElementById('opAlertsList'),
+    opAlertCount: document.getElementById('opAlertCount'),
+    opClearAlertsBtn: document.getElementById('opClearAlertsBtn'),
+    opPipelineBadge: document.getElementById('opPipelineBadge'),
+    opPipelineStatus: document.getElementById('opPipelineStatus'),
+    opPipelineFps: document.getElementById('opPipelineFps'),
+    opPipelineFrame: document.getElementById('opPipelineFrame'),
+    opPipelineTracks: document.getElementById('opPipelineTracks'),
+    opPipelineSession: document.getElementById('opPipelineSession'),
+    opBackendStatus: document.getElementById('opBackendStatus'),
+    tabAnalyticsBtn: document.getElementById('tabAnalyticsBtn'),
+    analyticsModal: document.getElementById('analyticsModal'),
+    analyticsBackdrop: document.getElementById('analyticsBackdrop'),
+    analyticsCloseBtn: document.getElementById('analyticsCloseBtn'),
+    forecastTableWrap: document.getElementById('forecastTableWrap'),
+    forecastHistoryBox: document.getElementById('forecastHistoryBox'),
+    forecastHistoryTitle: document.getElementById('forecastHistoryTitle'),
+    forecastChart: document.getElementById('forecastChart'),
+    topProductsWrap: document.getElementById('topProductsWrap'),
+    topProductsCount: document.getElementById('topProductsCount'),
+    recoProductSelect: document.getElementById('recoProductSelect'),
+    recoResultsWrap: document.getElementById('recoResultsWrap'),
     receiptModal: document.getElementById('receiptModal'),
     modalScrim: document.getElementById('modalScrim'),
     receiptModalClose: document.getElementById('receiptModalClose'),
@@ -804,6 +826,8 @@
   DOM.tabOperationsBtn.addEventListener('click', () => {
     DOM.operationsModal.style.display = 'flex';
     fetchInventory();
+    fetchAlerts();
+    fetchOperationsPipelineStatus();
   });
 
   DOM.operationsCloseBtn.addEventListener('click', closeOperations);
@@ -812,6 +836,303 @@
   function closeOperations() {
     DOM.operationsModal.style.display = 'none';
   }
+
+  // ─── ALERTS ────────────────────────────────────────────────────────────────
+  const ALERT_ICONS = {
+    LOW_STOCK: '📉',
+    MISPLACED_PRODUCT: '⚠️',
+    ANOMALY: '🔴',
+    UNKNOWN_PRODUCT: '❓',
+  };
+
+  async function fetchAlerts() {
+    try {
+      const res = await fetch('/alerts');
+      if (!res.ok) return;
+      const data = await res.json();
+      const alerts = data.alerts || [];
+      DOM.opAlertCount.textContent = `${alerts.length} Alert${alerts.length !== 1 ? 's' : ''}`;
+      if (alerts.length === 0) {
+        DOM.opAlertsList.innerHTML = '<div class="alert-empty">No active alerts. All systems nominal.</div>';
+      } else {
+        DOM.opAlertsList.innerHTML = alerts.slice(-10).reverse().map(a => {
+          const icon = ALERT_ICONS[a.type] || '⚠️';
+          const alertClass = (a.type || '').toLowerCase().replace(/_/g, '-');
+          return `
+            <div class="alert-card ${alertClass}">
+              <div class="alert-card-header">
+                <span class="alert-icon">${icon}</span>
+                <span class="alert-type">${a.type || 'ALERT'}</span>
+                <span class="alert-time mono">${a.timestamp ? new Date(a.timestamp * 1000).toLocaleTimeString() : ''}</span>
+              </div>
+              <div class="alert-message">${a.message || ''}</div>
+            </div>
+          `;
+        }).join('');
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  DOM.opClearAlertsBtn.addEventListener('click', async () => {
+    try {
+      await fetch('/alerts/clear', { method: 'POST' });
+      showToast('pick', 'All alerts cleared');
+      fetchAlerts();
+    } catch (e) { /* ignore */ }
+  });
+
+  // ─── PIPELINE STATUS IN OPERATIONS DRAWER ──────────────────────────────────
+  async function fetchOperationsPipelineStatus() {
+    try {
+      const res = await fetch('/pipeline/status');
+      if (!res.ok) {
+        DOM.opPipelineBadge.textContent = 'OFFLINE';
+        DOM.opPipelineBadge.style.background = 'rgba(244,63,94,0.15)';
+        DOM.opPipelineBadge.style.color = 'var(--accent-rose)';
+        DOM.opBackendStatus.textContent = 'OFFLINE';
+        DOM.opBackendStatus.style.color = 'var(--accent-rose)';
+        return;
+      }
+      const d = await res.json();
+      const running = d.running;
+      DOM.opPipelineBadge.textContent = running ? 'RUNNING' : 'IDLE';
+      DOM.opPipelineBadge.style.background = running ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)';
+      DOM.opPipelineBadge.style.color = running ? 'var(--accent-emerald)' : 'var(--accent-amber)';
+      DOM.opPipelineStatus.textContent = running ? 'Running' : 'Stopped';
+      DOM.opPipelineStatus.style.color = running ? 'var(--accent-emerald)' : 'var(--accent-amber)';
+      DOM.opPipelineFps.textContent = `${(d.fps || 0).toFixed(1)} fps`;
+      DOM.opPipelineFrame.textContent = `#${d.frame_id || 0}`;
+      DOM.opPipelineTracks.textContent = d.active_tracks || 0;
+      DOM.opPipelineSession.textContent = d.session_id || '—';
+      DOM.opBackendStatus.textContent = 'ONLINE';
+      DOM.opBackendStatus.style.color = 'var(--accent-emerald)';
+    } catch (e) {
+      DOM.opBackendStatus.textContent = 'OFFLINE';
+      DOM.opBackendStatus.style.color = 'var(--accent-rose)';
+    }
+  }
+
+  // ─── ANALYTICS DRAWER ──────────────────────────────────────────────────────
+  DOM.tabAnalyticsBtn.addEventListener('click', () => {
+    DOM.analyticsModal.style.display = 'flex';
+    fetchForecast();
+    fetchTopProducts();
+    populateRecoSelector();
+  });
+
+  DOM.analyticsCloseBtn.addEventListener('click', closeAnalytics);
+  DOM.analyticsBackdrop.addEventListener('click', closeAnalytics);
+
+  function closeAnalytics() {
+    DOM.analyticsModal.style.display = 'none';
+  }
+
+  // Analytics sub-tab switching
+  document.querySelectorAll('.analytics-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      document.querySelectorAll('.analytics-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.analytics-panel').forEach(p => p.style.display = 'none');
+      e.currentTarget.classList.add('active');
+      const panel = e.currentTarget.dataset.panel;
+      if (panel === 'forecast') { document.getElementById('panelForecast').style.display = 'block'; fetchForecast(); }
+      if (panel === 'topproducts') { document.getElementById('panelTopProducts').style.display = 'block'; fetchTopProducts(); }
+      if (panel === 'recommendations') { document.getElementById('panelRecommendations').style.display = 'block'; populateRecoSelector(); }
+    });
+  });
+
+  // ─── DEMAND FORECAST ───────────────────────────────────────────────────────
+  let allInventoryProducts = [];
+
+  async function fetchForecast() {
+    DOM.forecastTableWrap.innerHTML = '<div class="analytics-loading">Loading forecast data...</div>';
+    DOM.forecastHistoryBox.style.display = 'none';
+    try {
+      const res = await fetch('/forecast');
+      if (!res.ok) throw new Error('No forecast endpoint');
+      const data = await res.json();
+      const rows = data.products || [];
+
+      if (!rows.length || rows.every(r => r.history_days === 0)) {
+        DOM.forecastTableWrap.innerHTML = `
+          <div class="analytics-empty">
+            No sales history yet.<br>
+            <span style="color:var(--text-tertiary);font-size:12px;">Run <code>python src/data_tools/seed_history.py</code> to generate demo history.</span>
+          </div>`;
+        return;
+      }
+
+      DOM.forecastTableWrap.innerHTML = `
+        <table class="op-table forecast-table">
+          <thead><tr>
+            <th>Product</th><th>Forecast/day</th><th>Stock</th><th>Days Left</th>
+            <th>Reorder Point</th><th>Order Qty</th><th>Reorder?</th><th>α</th>
+          </tr></thead>
+          <tbody>${rows.map(r => `
+            <tr>
+              <td><strong>${cleanName(r.name)}</strong></td>
+              <td class="mono">${(r.forecast||0).toFixed(2)}</td>
+              <td class="mono">${r.stock}</td>
+              <td class="mono" style="color:${r.days_to_stockout < 5 ? 'var(--accent-rose)' : 'inherit'}">${r.days_to_stockout === null ? '∞' : r.days_to_stockout}</td>
+              <td class="mono">${r.reorder_point}</td>
+              <td class="mono">${r.order_qty}</td>
+              <td><span class="tag-status ${r.reorder_now ? 'low' : 'ok'}">${r.reorder_now ? '🔴 Reorder Now' : '🟢 OK'}</span></td>
+              <td class="mono" style="color:var(--text-tertiary);">${r.alpha}</td>
+            </tr>
+          `).join('')}</tbody>
+        </table>
+        <div class="forecast-product-selector">
+          <span style="color:var(--text-secondary);font-size:13px;">Show history for:</span>
+          ${rows.map(r => `<button class="fh-btn" data-name="${r.name}">${cleanName(r.name)}</button>`).join('')}
+        </div>`;
+
+      document.querySelectorAll('.fh-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.fh-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          fetchForecastHistory(btn.dataset.name);
+        });
+      });
+    } catch (e) {
+      DOM.forecastTableWrap.innerHTML = '<div class="analytics-empty">Forecast data unavailable.</div>';
+    }
+  }
+
+  async function fetchForecastHistory(productName) {
+    DOM.forecastHistoryBox.style.display = 'block';
+    DOM.forecastHistoryTitle.textContent = `Daily Demand — ${cleanName(productName)}`;
+    DOM.forecastChart.innerHTML = '<div class="analytics-loading">Loading chart...</div>';
+    try {
+      const res = await fetch(`/forecast/${productName}/history`);
+      if (!res.ok) throw new Error();
+      const hist = await res.json();
+      const days = hist.days || [];
+      const demand = hist.demand || [];
+      const fDays = hist.forecast_days || [];
+      const fVals = hist.forecast || [];
+
+      if (!days.length) {
+        DOM.forecastChart.innerHTML = '<div class="analytics-empty">No history available.</div>';
+        return;
+      }
+
+      const maxVal = Math.max(...demand, ...fVals, 1);
+      const allDays = [...days, ...fDays];
+      const totalBars = allDays.length;
+      const barW = Math.max(8, Math.min(24, Math.floor(520 / totalBars)));
+
+      DOM.forecastChart.innerHTML = `
+        <div class="bar-chart-wrap">
+          <div class="bar-chart">
+            ${days.map((d, i) => `
+              <div class="bar-col">
+                <div class="bar actual" style="height:${Math.round((demand[i]/maxVal)*120)}px;" title="${d}: ${demand[i]} units"></div>
+                <div class="bar-label">${i % Math.ceil(days.length/6) === 0 ? d.slice(-5) : ''}</div>
+              </div>
+            `).join('')}
+            ${fDays.map((d, i) => `
+              <div class="bar-col">
+                <div class="bar forecast" style="height:${Math.round((fVals[i]/maxVal)*120)}px;" title="Forecast ${d}: ${fVals[i].toFixed(2)} units"></div>
+                <div class="bar-label">${d.slice(-5)}</div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="bar-legend">
+            <span class="legend-actual">Actual demand</span>
+            <span class="legend-forecast">SES Forecast</span>
+          </div>
+        </div>`;
+    } catch (e) {
+      DOM.forecastChart.innerHTML = '<div class="analytics-empty">History unavailable.</div>';
+    }
+  }
+
+  // ─── TOP PRODUCTS ──────────────────────────────────────────────────────────
+  async function fetchTopProducts() {
+    DOM.topProductsWrap.innerHTML = '<div class="analytics-loading">Loading...</div>';
+    try {
+      const res = await fetch('/analytics/top-products?limit=8');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const products = data.top_products || [];
+      DOM.topProductsCount.textContent = `${products.length} tracked`;
+
+      if (!products.length) {
+        DOM.topProductsWrap.innerHTML = '<div class="analytics-empty">No purchase history yet.</div>';
+        return;
+      }
+
+      const max = products[0].pick_count || 1;
+      DOM.topProductsWrap.innerHTML = `
+        <div class="top-products-list">
+          ${products.map((p, i) => `
+            <div class="top-product-row">
+              <span class="tp-rank">#${i+1}</span>
+              <div class="tp-info">
+                <span class="tp-name">${cleanName(p.name)}</span>
+                <div class="tp-bar-bg">
+                  <div class="tp-bar-fill" style="width:${Math.round((p.pick_count/max)*100)}%"></div>
+                </div>
+              </div>
+              <span class="tp-count mono">${p.pick_count} picks</span>
+            </div>
+          `).join('')}
+        </div>`;
+    } catch (e) {
+      DOM.topProductsWrap.innerHTML = '<div class="analytics-empty">Analytics unavailable.</div>';
+    }
+  }
+
+  // ─── CO-PURCHASE RECOMMENDATIONS ──────────────────────────────────────────
+  async function populateRecoSelector() {
+    try {
+      const res = await fetch('/inventory');
+      if (!res.ok) return;
+      const data = await res.json();
+      allInventoryProducts = data.products || [];
+      DOM.recoProductSelect.innerHTML = allInventoryProducts.map(p =>
+        `<option value="${p.product_id}">${cleanName(p.name)}</option>`
+      ).join('');
+      if (allInventoryProducts.length > 0) fetchRecommendations();
+    } catch (e) { /* ignore */ }
+  }
+
+  async function fetchRecommendations() {
+    const selId = DOM.recoProductSelect.value;
+    if (!selId) return;
+    DOM.recoResultsWrap.innerHTML = '<div class="analytics-loading">Loading recommendations...</div>';
+    try {
+      const res = await fetch(`/analytics/recommendations/${selId}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const recs = data.recommendations || [];
+      if (!recs.length) {
+        DOM.recoResultsWrap.innerHTML = '<div class="analytics-empty">No co-purchase data yet for this product.</div>';
+        return;
+      }
+      DOM.recoResultsWrap.innerHTML = `
+        <div class="reco-list">
+          ${recs.map(r => `
+            <div class="reco-row">
+              <div class="reco-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+              </div>
+              <div class="reco-info">
+                <span class="reco-name">${cleanName(r.name)}</span>
+                <span class="reco-meta">Bought together ${r.co_occurrence_count}x</span>
+              </div>
+              <span class="reco-conf">${Math.round(r.confidence * 100)}% confidence</span>
+            </div>
+          `).join('')}
+        </div>`;
+    } catch (e) {
+      DOM.recoResultsWrap.innerHTML = '<div class="analytics-empty">Recommendations unavailable.</div>';
+    }
+  }
+
+  DOM.recoProductSelect.addEventListener('change', fetchRecommendations);
 
   async function fetchInventory() {
     try {
@@ -887,4 +1208,12 @@
   setInterval(updateLiveFrame, 120);
   setInterval(fetchTelemetry, 600);
   setInterval(fetchCart, 800);
+
+  // Refresh alerts & pipeline status periodically when ops drawer is open
+  setInterval(() => {
+    if (DOM.operationsModal && DOM.operationsModal.style.display !== 'none') {
+      fetchAlerts();
+      fetchOperationsPipelineStatus();
+    }
+  }, 3000);
 })();

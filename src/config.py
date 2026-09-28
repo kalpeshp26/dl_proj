@@ -46,12 +46,14 @@ WORLD_PROMPTS: dict[str, str] = {
     "soup packet": "product",
     "soup sachet": "product",
     "green soup packet": "product",
-    "chings packet": "product",
+    "chings manchurian packet": "product",
     "chinese soup packet": "product",
 
     # Hakka noodles & masala pouches:
     "hakka noodles packet": "product",
     "chings hakka": "product",
+    "chings hakka packet": "product",
+    "chings hakka noodles": "product",
     "orange noodles packet": "product",
     "noodles packet": "product",
     "noodle masala packet": "product",

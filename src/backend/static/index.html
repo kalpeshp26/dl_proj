@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/static/app.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310b981' stroke-width='2'><circle cx='9' cy='21' r='1'/><circle cx='20' cy='21' r='1'/><path d='M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6'/></svg>">
 </head>
-<body class="enterprise-dark">
+<body class="enterprise-light elite-white">
   <div class="app-layout">
     
     <!-- TOP NAVIGATION & TELEMETRY BAR -->
@@ -108,6 +108,14 @@
               <line x1="12" y1="22.08" x2="12" y2="12"></line>
             </svg>
             <span>Operations</span>
+          </button>
+          <button class="nav-tab" id="tabAnalyticsBtn">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <span>Analytics</span>
           </button>
         </div>
       </div>
@@ -358,6 +366,55 @@
         </div>
 
         <div class="drawer-content">
+
+          <!-- Pipeline Status -->
+          <div class="op-section">
+            <div class="section-title">
+              <h4>Pipeline Status</h4>
+              <span class="live-badge" id="opPipelineBadge">CHECKING...</span>
+            </div>
+            <div class="pipeline-status-grid">
+              <div class="ps-cell">
+                <span class="ps-label">STATUS</span>
+                <span class="ps-value" id="opPipelineStatus">—</span>
+              </div>
+              <div class="ps-cell">
+                <span class="ps-label">FPS</span>
+                <span class="ps-value mono" id="opPipelineFps">—</span>
+              </div>
+              <div class="ps-cell">
+                <span class="ps-label">FRAME</span>
+                <span class="ps-value mono" id="opPipelineFrame">—</span>
+              </div>
+              <div class="ps-cell">
+                <span class="ps-label">TRACKS</span>
+                <span class="ps-value mono" id="opPipelineTracks">—</span>
+              </div>
+              <div class="ps-cell">
+                <span class="ps-label">SESSION</span>
+                <span class="ps-value mono" id="opPipelineSession">—</span>
+              </div>
+              <div class="ps-cell">
+                <span class="ps-label">BACKEND</span>
+                <span class="ps-value" id="opBackendStatus">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alerts Section -->
+          <div class="op-section">
+            <div class="section-title">
+              <h4>Active Alerts</h4>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span class="count-tag" id="opAlertCount">0 Alerts</span>
+                <button class="btn-clear-alerts" id="opClearAlertsBtn">Clear All</button>
+              </div>
+            </div>
+            <div class="alerts-list" id="opAlertsList">
+              <div class="alert-empty">No active alerts. All systems nominal.</div>
+            </div>
+          </div>
+
           <!-- Inventory Section -->
           <div class="op-section">
             <div class="section-title">
@@ -631,6 +688,83 @@
             </svg>
             <span>Done / Close</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYTICS MODAL -->
+    <div class="analytics-modal" id="analyticsModal" style="display:none;">
+      <div class="analytics-backdrop" id="analyticsBackdrop"></div>
+      <div class="analytics-drawer">
+        <div class="drawer-header">
+          <div class="drawer-heading">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <h3>Analytics &amp; Intelligence</h3>
+          </div>
+          <button class="drawer-close" id="analyticsCloseBtn">&times;</button>
+        </div>
+
+        <!-- Analytics Sub-Tabs -->
+        <div class="analytics-tab-bar">
+          <button class="analytics-tab active" data-panel="forecast">📈 Demand Forecast</button>
+          <button class="analytics-tab" data-panel="topproducts">🏆 Top Products</button>
+          <button class="analytics-tab" data-panel="recommendations">🔗 Recommendations</button>
+        </div>
+
+        <div class="drawer-content">
+
+          <!-- Forecast Panel -->
+          <div class="analytics-panel active" id="panelForecast">
+            <div class="op-section" style="margin-top:0;">
+              <div class="section-title">
+                <h4>Demand Forecast (SES Model)</h4>
+                <span class="live-badge">7-DAY HORIZON</span>
+              </div>
+              <div id="forecastTableWrap">
+                <div class="analytics-loading">Loading forecast data...</div>
+              </div>
+              <div class="forecast-history-box" id="forecastHistoryBox" style="display:none;">
+                <div class="fh-title" id="forecastHistoryTitle">Daily Demand History</div>
+                <div class="fh-chart" id="forecastChart"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top Products Panel -->
+          <div class="analytics-panel" id="panelTopProducts" style="display:none;">
+            <div class="op-section" style="margin-top:0;">
+              <div class="section-title">
+                <h4>Top Products by Picks</h4>
+                <span class="count-tag" id="topProductsCount">—</span>
+              </div>
+              <div id="topProductsWrap">
+                <div class="analytics-loading">Loading product data...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recommendations Panel -->
+          <div class="analytics-panel" id="panelRecommendations" style="display:none;">
+            <div class="op-section" style="margin-top:0;">
+              <div class="section-title">
+                <h4>Product Co-Purchase Recommendations</h4>
+              </div>
+              <div class="reco-selector">
+                <label>Select product:</label>
+                <select id="recoProductSelect">
+                  <option value="">Loading products...</option>
+                </select>
+              </div>
+              <div id="recoResultsWrap">
+                <div class="analytics-loading">Select a product above to see recommendations.</div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

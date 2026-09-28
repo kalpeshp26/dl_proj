@@ -243,32 +243,43 @@ class ProductClassifier:
         max_confs, max_indices = probs.max(dim=1)
         best_view_idx = int(max_confs.argmax().item())
 
+        self._class_to_idx: dict[str, int] = {v: k for k, v in self._idx_to_class.items()}
         conf = float(max_confs[best_view_idx].item())
         pred_idx = int(max_indices[best_view_idx].item())
         emb_np = emb[best_view_idx].cpu().numpy()
 
-        # ── Open-set / UNKNOWN detection ─────────────────────────────────────
-        # Dual criterion (no real centroids needed):
-        #   1. Softmax margin: gap between top-1 and top-2 < 0.30 → model is
-        #      unsure (typical for unseen objects that sit between two classes)
-        #   2. Max confidence < 0.65 → overall low certainty
-        #   3. Optional centroid distance (only when real centroids computed by
-        #      openset.py are available via centroids_meta.json)
+        # ── Color heuristic analysis (signature color cues for the 4 products) ─
+        h_prod, h_score, color_scores = self._heuristic_classify(crop_bgr)
+        h_idx = self._class_to_idx.get(h_prod, -1)
+
+        # ── Open-set / UNKNOWN detection & Ensemble ─────────────────────────
         openset_dist = 0.0
         is_unknown = False
 
-        best_probs = probs[best_view_idx]  # shape (num_classes,)
-        top2 = best_probs.topk(min(2, self._num_classes))
-        top1_conf = float(top2.values[0].item())
-        margin = float((top2.values[0] - top2.values[1]).item()) if len(top2.values) > 1 else 1.0
-
-        # Mark UNKNOWN if model is ambiguous or low confidence
-        if top1_conf < 0.65 or margin < 0.30:
+        # If a distinctive product color signature is detected (green/orange/yellow/blue):
+        if h_score >= 0.04:
+            pred_idx = h_idx
+            class_name = h_prod
+            conf = min(0.96, max(0.88, 0.78 + h_score * 1.5))
+            is_unknown = False
+        elif conf >= 0.60:
+            # Neural network alone has high confidence
+            class_name = self._idx_to_class.get(pred_idx, "UNKNOWN")
+            is_unknown = False
+        elif h_score >= 0.02 and h_idx == pred_idx:
+            # CNN top prediction matches moderate color evidence
+            class_name = h_prod
+            conf = 0.88
+            is_unknown = False
+        else:
+            # Ambiguous/unseen item (hands, table background, foreign items)
             is_unknown = True
+            class_name = "UNKNOWN"
+            class_idx = -1
 
         # Centroid distance check (only when real centroids exist from openset.py)
         centroids_meta = MODELS_DIR / "centroids_meta.json"
-        if self._centroids is not None and centroids_meta.exists():
+        if not is_unknown and self._centroids is not None and centroids_meta.exists():
             meta_data = {}
             try:
                 import json as _json
@@ -283,8 +294,9 @@ class ProductClassifier:
                 eff_thresh = self._thresh * 0.85 if conf >= 0.85 else self._thresh
                 if openset_dist > eff_thresh:
                     is_unknown = True
+                    class_name = "UNKNOWN"
+                    pred_idx = -1
 
-        class_name = "UNKNOWN" if is_unknown else self._idx_to_class.get(pred_idx, "UNKNOWN")
         class_idx = -1 if is_unknown else pred_idx
 
         result = ClassificationResult(
@@ -301,29 +313,35 @@ class ProductClassifier:
 
         return result
 
-    @staticmethod
-    def _heuristic_classify(crop_bgr: np.ndarray) -> tuple[str, float]:
-        """Color and visual fallback for products before fine-tuning on user camera."""
+    @classmethod
+    def _heuristic_classify(cls, crop_bgr: np.ndarray) -> tuple[str, float, dict[str, float]]:
+        """
+        Color and visual signature classifier for the 4 physical retail products:
+        - chings_manchurian: Bright green Chinese soup / masala pouch
+        - chings_hakka: Vivid orange / fiery red noodles pouch
+        - homelite_matchbox: Distinct yellow cardboard matchbox
+        - vaseline_jelly: Royal blue cap / blue branding on white jar
+        """
         if crop_bgr is None or crop_bgr.size == 0:
-            return "chings_manchurian", 0.75
+            return "UNKNOWN", 0.0, {}
         hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
         h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
         total_pixels = float(crop_bgr.shape[0] * crop_bgr.shape[1] + 1e-6)
 
         # Green mask (Ching's Veg Manchurian)
-        green_mask = (h >= 35) & (h <= 88) & (s >= 30) & (v >= 30)
+        green_mask = (h >= 32) & (h <= 88) & (s >= 25) & (v >= 25)
         green_ratio = float(np.sum(green_mask)) / total_pixels
 
-        # Orange/Red mask (Ching's Hakka Noodles)
-        orange_mask = ((h <= 20) | (h >= 165)) & (s >= 50) & (v >= 45)
+        # Orange/Red mask (Ching's Hakka Noodles) - excludes pure yellow
+        orange_mask = ((h <= 20) | (h >= 165)) & (s >= 45) & (v >= 40)
         orange_ratio = float(np.sum(orange_mask)) / total_pixels
 
         # Yellow mask (Homelite Matchbox)
-        yellow_mask = (h >= 20) & (h <= 35) & (s >= 50) & (v >= 50)
+        yellow_mask = (h >= 20) & (h <= 36) & (s >= 40) & (v >= 40)
         yellow_ratio = float(np.sum(yellow_mask)) / total_pixels
 
         # Blue mask (Vaseline Petroleum Jelly)
-        blue_mask = (h >= 95) & (h <= 135) & (s >= 40) & (v >= 35)
+        blue_mask = (h >= 90) & (h <= 138) & (s >= 35) & (v >= 30)
         blue_ratio = float(np.sum(blue_mask)) / total_pixels
 
         scores = {
@@ -334,9 +352,7 @@ class ProductClassifier:
         }
         best_prod = max(scores, key=lambda k: scores[k])
         best_score = scores[best_prod]
-        if best_score > 0.05:
-            return best_prod, min(0.96, 0.72 + best_score)
-        return "chings_manchurian", 0.85
+        return best_prod, best_score, scores
 
     def _cosine_dist_to_nearest(self, emb: np.ndarray) -> float:
         """Cosine distance (1 − similarity) to the nearest class centroid."""

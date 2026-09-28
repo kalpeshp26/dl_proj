@@ -23,6 +23,7 @@ deepretail.db-*
 logs/*.jsonl
 logs/*.json
 config.json
+.env
 runs/
 
 # Model weights (large — share via Releases / Drive; see README)
