@@ -248,31 +248,37 @@ class ProductClassifier:
         pred_idx = int(max_indices[best_view_idx].item())
         emb_np = emb[best_view_idx].cpu().numpy()
 
-        # ── Color heuristic analysis (signature color cues for the 4 products) ─
-        h_prod, h_score, color_scores = self._heuristic_classify(crop_bgr)
+        # ── Color heuristic analysis (signature color cues on foreground inner ROI) ─
+        h_prod, h_score, color_scores, is_predominantly_dark = self._heuristic_classify(crop_bgr)
         h_idx = self._class_to_idx.get(h_prod, -1)
 
         # ── Open-set / UNKNOWN detection & Ensemble ─────────────────────────
         openset_dist = 0.0
         is_unknown = False
 
-        # If a distinctive product color signature is detected (green/orange/yellow/blue):
-        if h_score >= 0.04:
+        # If an item is predominantly black/dark (like Sunsilk Black Shine) and has no
+        # dominant signature color, it is unequivocally an untrained out-of-catalog item:
+        if is_predominantly_dark and h_score < 0.18:
+            is_unknown = True
+            class_name = "UNKNOWN"
+            class_idx = -1
+        # If a distinctive product signature color is strongly present in the object foreground (>= 15%):
+        elif h_score >= 0.15:
             pred_idx = h_idx
             class_name = h_prod
-            conf = min(0.96, max(0.88, 0.78 + h_score * 1.5))
+            conf = min(0.96, max(0.90, 0.82 + h_score * 0.4))
             is_unknown = False
-        elif conf >= 0.60:
-            # Neural network alone has high confidence
-            class_name = self._idx_to_class.get(pred_idx, "UNKNOWN")
-            is_unknown = False
-        elif h_score >= 0.02 and h_idx == pred_idx:
-            # CNN top prediction matches moderate color evidence
+        # If moderate color presence (>= 8%) agrees with CNN top-1 prediction:
+        elif h_score >= 0.08 and h_idx == pred_idx:
             class_name = h_prod
             conf = 0.88
             is_unknown = False
+        # If neural network alone has high certainty without being a dark unknown item:
+        elif conf >= 0.65 and not is_predominantly_dark:
+            class_name = self._idx_to_class.get(pred_idx, "UNKNOWN")
+            is_unknown = False
         else:
-            # Ambiguous/unseen item (hands, table background, foreign items)
+            # Low certainty or alien color pattern (hands, black shampoo, foreign boxes)
             is_unknown = True
             class_name = "UNKNOWN"
             class_idx = -1
@@ -314,35 +320,53 @@ class ProductClassifier:
         return result
 
     @classmethod
-    def _heuristic_classify(cls, crop_bgr: np.ndarray) -> tuple[str, float, dict[str, float]]:
+    def _heuristic_classify(
+        cls, crop_bgr: np.ndarray
+    ) -> tuple[str, float, dict[str, float], bool]:
         """
         Color and visual signature classifier for the 4 physical retail products:
         - chings_manchurian: Bright green Chinese soup / masala pouch
-        - chings_hakka: Vivid orange / fiery red noodles pouch
+        - chings_hakka: Vivid orange / fiery red noodles pouch (high saturation S >= 90)
         - homelite_matchbox: Distinct yellow cardboard matchbox
         - vaseline_jelly: Royal blue cap / blue branding on white jar
+
+        Uses inner 70% ROI to prevent fingers holding the edges or shirts at the
+        bottom from polluting the product classification.
         """
         if crop_bgr is None or crop_bgr.size == 0:
-            return "UNKNOWN", 0.0, {}
-        hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
-        h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
-        total_pixels = float(crop_bgr.shape[0] * crop_bgr.shape[1] + 1e-6)
+            return "UNKNOWN", 0.0, {}, False
 
-        # Green mask (Ching's Veg Manchurian)
-        green_mask = (h >= 32) & (h <= 88) & (s >= 25) & (v >= 25)
-        green_ratio = float(np.sum(green_mask)) / total_pixels
+        h, w = crop_bgr.shape[:2]
+        # Inner 70% region to focus on the object foreground and avoid hand/shirt borders
+        y1, y2 = int(h * 0.15), int(h * 0.85)
+        x1, x2 = int(w * 0.15), int(w * 0.85)
+        inner = crop_bgr[y1:y2, x1:x2] if (y2 > y1 and x2 > x1) else crop_bgr
 
-        # Orange/Red mask (Ching's Hakka Noodles) - excludes pure yellow
-        orange_mask = ((h <= 20) | (h >= 165)) & (s >= 45) & (v >= 40)
-        orange_ratio = float(np.sum(orange_mask)) / total_pixels
+        hsv = cv2.cvtColor(inner, cv2.COLOR_BGR2HSV)
+        h_ch, s_ch, v_ch = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+        total = float(inner.shape[0] * inner.shape[1] + 1e-6)
 
-        # Yellow mask (Homelite Matchbox)
-        yellow_mask = (h >= 20) & (h <= 36) & (s >= 40) & (v >= 40)
-        yellow_ratio = float(np.sum(yellow_mask)) / total_pixels
+        # 1. Manchurian: Bright green sachet
+        green_mask = (h_ch >= 32) & (h_ch <= 88) & (s_ch >= 40) & (v_ch >= 35)
+        green_ratio = float(np.sum(green_mask)) / total
 
-        # Blue mask (Vaseline Petroleum Jelly)
-        blue_mask = (h >= 90) & (h <= 138) & (s >= 35) & (v >= 30)
-        blue_ratio = float(np.sum(blue_mask)) / total_pixels
+        # 2. Hakka Noodles: Deep vivid red/orange packaging
+        # NOTE: s_ch >= 90 strictly excludes human skin/fingers (which have s_ch in 20-75)
+        orange_mask = ((h_ch <= 18) | (h_ch >= 168)) & (s_ch >= 90) & (v_ch >= 60)
+        orange_ratio = float(np.sum(orange_mask)) / total
+
+        # 3. Matchbox: Bright yellow cardboard box
+        yellow_mask = (h_ch >= 20) & (h_ch <= 38) & (s_ch >= 55) & (v_ch >= 60)
+        yellow_ratio = float(np.sum(yellow_mask)) / total
+
+        # 4. Vaseline: Royal blue lid / logo
+        blue_mask = (h_ch >= 95) & (h_ch <= 135) & (s_ch >= 60) & (v_ch >= 45)
+        blue_ratio = float(np.sum(blue_mask)) / total
+
+        # Dark / black detection (e.g. Sunsilk Black Shine packet)
+        dark_mask = (v_ch < 45)
+        dark_ratio = float(np.sum(dark_mask)) / total
+        is_predominantly_dark = dark_ratio > 0.40
 
         scores = {
             "chings_manchurian": green_ratio,
@@ -352,7 +376,7 @@ class ProductClassifier:
         }
         best_prod = max(scores, key=lambda k: scores[k])
         best_score = scores[best_prod]
-        return best_prod, best_score, scores
+        return best_prod, best_score, scores, is_predominantly_dark
 
     def _cosine_dist_to_nearest(self, emb: np.ndarray) -> float:
         """Cosine distance (1 − similarity) to the nearest class centroid."""

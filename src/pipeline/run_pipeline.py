@@ -486,7 +486,7 @@ class Pipeline:
                         direct_product = "chings_manchurian"
                     elif any(k in t_prompt for k in ("matchbox", "homelite")):
                         direct_product = "homelite_matchbox"
-                    elif any(k in t_prompt for k in ("vaseline", "jelly", "jar")):
+                    elif any(k in t_prompt for k in ("vaseline", "petroleum jelly")):
                         direct_product = "vaseline_jelly"
 
                     assert self._classifier is not None  # always set when not mock_mode
